@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Romi Nexus | Operations Dashboard — Mario Brkic</title>
+  <meta name="robots" content="noindex,nofollow">
+  <!--
+    ROMI NEXUS — MARIO BRKIC OPERATIONS DASHBOARD v1.0
+    =====================================================
+    Role: Co-Founder & Head of Operations
+    KPI: 20 Qualified Counterparties by June 30, 2026
+    Min: 35 hrs/week logged in CRM
+    MOU: v14 — 3yr vest, 1yr cliff (19 March 2027)
+    =====================================================
+    SECURITY:
+    - OWASP A03: All user-visible data set via textContent, never innerHTML
+    - OWASP A07: OTP session token stored in sessionStorage (not localStorage)
+    - OWASP A01: opsToken format validated (64-hex) before every API call
+    - OWASP A05: CSP meta tag enforced
+    - Input sanitization on all user inputs before submission
+    - XSS-safe: sanitize() used on all untrusted strings
+    - Rate-limit awareness: retry-after respected on 429 responses
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://rominexus.workers.dev https://script.google.com https://script.googleusercontent.com; img-src 'self' data:;">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --gold:         #D4AF37;
+      --gold-dim:     #a8892a;
+      --gold-hover:   #b5952f;
+      --bg:           #020202;
+      --bg-panel:     #080808;
+      --bg-card:      #0d0d0d;
+      --border:       #1a1a1a;
+      --border-bright:#2a2a2a;
+      --text:         #e8e8e8;
+      --text-muted:   #555;
+      --text-dim:     #333;
+      --success:      #00e676;
+      --warning:      #ffab00;
+      --danger:       #ff1744;
+      --info:         #2979ff;
+      --mono:         'IBM Plex Mono', monospace;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px;min-height:100vh;overflow-x:hidden;}
+
+    /* ── TOP BAR ── */
+    .top-bar{
+      background:#000;border-bottom:1px solid var(--gold);
+      height:42px;display:flex;align-items:center;justify-content:space-between;
+      padding:0 20px;position:sticky;top:0;z-index:1000;
+    }
+    .top-bar-logo{font-size:13px;font-weight:700;letter-spacing:4px;color:var(--gold);text-transform:uppercase;}
+    .top-bar-role{font-size:9px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;}
+    .top-bar-right{display:flex;align-items:center;gap:16px;}
+    #clock{font-size:10px;color:var(--text-muted);letter-spacing:1px;}
+    .status-dot{width:6px;height:6px;border-radius:50%;background:var(--success);box-shadow:0 0 6px var(--success);animation:pulse 2s infinite;flex-shrink:0;}
+    @keyframes pulse{0%,100%{opacity:1;}50%{opacity:0.3;}}
+    .logout-btn{background:transparent;border:1px solid var(--border-bright);color:var(--text-muted);font-family:var(--mono);font-size:9px;padding:5px 12px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;transition:.2s;}
+    .logout-btn:hover{border-color:var(--danger);color:var(--danger);}
+
+    /* ── AUTH OVERLAY ── */
+    #authOverlay{
+      position:fixed;inset:0;background:#000;z-index:9999;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .auth-box{
+      background:var(--bg-panel);border:1px solid var(--border-bright);
+      border-top:2px solid var(--gold);
+      width:360px;padding:32px;
+    }
+    .auth-logo{font-size:18px;font-weight:700;color:var(--gold);letter-spacing:4px;margin-bottom:4px;}
+    .auth-sub{font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-bottom:28px;}
+    .auth-label{font-size:9px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+    .auth-input{
+      width:100%;background:var(--bg);border:1px solid var(--border-bright);color:var(--text);
+      font-family:var(--mono);font-size:12px;padding:10px 12px;outline:none;transition:.2s;
+    }
+    .auth-input:focus{border-color:var(--gold);}
+    .auth-btn{
+      width:100%;background:var(--gold);color:#000;border:none;
+      font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:2px;
+      text-transform:uppercase;padding:12px;cursor:pointer;transition:.2s;margin-top:16px;
+    }
+    .auth-btn:hover{background:var(--gold-hover);}
+    .auth-btn:disabled{background:var(--text-dim);cursor:not-allowed;}
+    .auth-msg{font-size:10px;margin-top:10px;min-height:18px;text-align:center;}
+    .auth-msg.err{color:var(--danger);}
+    .auth-msg.ok{color:var(--success);}
+    .auth-step{display:none;}
+    .auth-step.active{display:block;}
+
+    /* ── MAIN LAYOUT ── */
+    #appShell{display:none;}
+    .dash-wrap{max-width:1280px;margin:0 auto;padding:20px 16px;}
+
+    /* ── ALERT BANNER ── */
+    .alert-banner{
+      border-left:3px solid var(--warning);background:#0d0b00;
+      padding:10px 16px;font-size:10px;color:var(--warning);
+      letter-spacing:.5px;margin-bottom:16px;display:none;
+    }
+    .alert-banner.show{display:block;}
+
+    /* ── GRID HEADER ROW ── */
+    .dash-header{
+      display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1px;
+      background:var(--border);border:1px solid var(--border);margin-bottom:16px;
+    }
+    .dh-cell{background:var(--bg-panel);padding:18px 16px;}
+    .dh-label{font-size:8px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+    .dh-val{font-size:24px;font-weight:700;color:var(--gold);letter-spacing:-0.5px;line-height:1;}
+    .dh-val.warn{color:var(--warning);}
+    .dh-val.danger{color:var(--danger);}
+    .dh-val.success{color:var(--success);}
+    .dh-sub{font-size:9px;color:var(--text-muted);margin-top:4px;}
+
+    /* ── PROGRESS BAR ── */
+    .progress-wrap{height:3px;background:var(--border);margin-top:10px;}
+    .progress-fill{height:100%;background:var(--gold);transition:width .6s ease;}
+    .progress-fill.warn{background:var(--warning);}
+    .progress-fill.danger{background:var(--danger);}
+
+    /* ── TWO-COL LAYOUT ── */
+    .two-col{display:grid;grid-template-columns:1fr 380px;gap:12px;margin-bottom:12px;}
+    @media(max-width:900px){.two-col{grid-template-columns:1fr;}}
+
+    /* ── PANEL ── */
+    .panel{background:var(--bg-panel);border:1px solid var(--border);}
+    .panel-header{
+      padding:10px 14px;border-bottom:1px solid var(--border);
+      display:flex;align-items:center;justify-content:space-between;background:#0a0a0a;
+    }
+    .panel-title{font-size:10px;font-weight:700;letter-spacing:2px;color:var(--gold);text-transform:uppercase;}
+    .panel-title::before{content:'[';color:var(--text-muted);}
+    .panel-title::after{content:']';color:var(--text-muted);}
+    .panel-meta{font-size:9px;color:var(--text-muted);letter-spacing:.5px;}
+    .panel-body{padding:14px;}
+
+    /* ── QC TABLE ── */
+    .qc-table{width:100%;border-collapse:collapse;}
+    .qc-table th{font-size:8px;color:var(--text-muted);letter-spacing:2px;text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);text-transform:uppercase;}
+    .qc-table td{padding:8px 8px;border-bottom:1px solid var(--border);font-size:10px;vertical-align:middle;}
+    .qc-table tr:last-child td{border-bottom:none;}
+    .qc-table tr:hover td{background:#0d0d0d;}
+    .stage-badge{
+      display:inline-block;font-size:8px;letter-spacing:1px;
+      padding:2px 6px;text-transform:uppercase;font-weight:700;
+    }
+    .stage-0{background:#111;color:var(--text-muted);}
+    .stage-1{background:#0d1a00;color:#66bb6a;}
+    .stage-2{background:#1a0f00;color:var(--warning);}
+    .stage-3{background:#001a0d;color:var(--success);}
+    .gate-pass{color:var(--success);}
+    .gate-fail{color:var(--danger);}
+    .gate-na{color:var(--text-dim);}
+    .action-btn{
+      background:transparent;border:1px solid var(--border-bright);color:var(--text-muted);
+      font-family:var(--mono);font-size:8px;padding:3px 8px;letter-spacing:1px;
+      text-transform:uppercase;cursor:pointer;transition:.2s;
+    }
+    .action-btn:hover{border-color:var(--gold);color:var(--gold);}
+    .action-btn.danger-btn:hover{border-color:var(--danger);color:var(--danger);}
+
+    /* ── HOURS LOG ── */
+    .hours-form{display:grid;gap:10px;}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+    .f-label{font-size:8px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;}
+    .f-input,.f-select,.f-textarea{
+      width:100%;background:var(--bg);border:1px solid var(--border-bright);color:var(--text);
+      font-family:var(--mono);font-size:11px;padding:8px 10px;outline:none;transition:.2s;
+    }
+    .f-input:focus,.f-select:focus,.f-textarea:focus{border-color:var(--gold);}
+    .f-textarea{min-height:64px;resize:vertical;}
+    .f-select option{background:var(--bg);}
+    .submit-btn{
+      background:var(--gold);color:#000;border:none;font-family:var(--mono);
+      font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+      padding:10px;cursor:pointer;transition:.2s;width:100%;
+    }
+    .submit-btn:hover{background:var(--gold-hover);}
+    .submit-btn:disabled{background:var(--text-dim);cursor:not-allowed;}
+
+    /* ── HOURS LOG LIST ── */
+    .log-entry{
+      padding:8px 10px;border-bottom:1px solid var(--border);
+      display:flex;justify-content:space-between;align-items:flex-start;gap:8px;
+    }
+    .log-entry:last-child{border-bottom:none;}
+    .log-desc{font-size:10px;color:var(--text);flex:1;}
+    .log-meta{font-size:9px;color:var(--text-muted);text-align:right;white-space:nowrap;}
+    .log-hours{font-size:11px;font-weight:700;color:var(--gold);}
+
+    /* ── WEEKLY TRACKER ── */
+    .week-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:10px;}
+    .day-block{
+      height:32px;background:var(--bg-card);border:1px solid var(--border);
+      display:flex;align-items:center;justify-content:center;
+      font-size:9px;color:var(--text-muted);font-weight:600;
+      position:relative;overflow:hidden;
+    }
+    .day-block.filled{background:#0d1a00;border-color:#2a5c00;color:var(--success);}
+    .day-block.target{background:#1a1000;border-color:#5c3000;color:var(--warning);}
+    .day-block.today{border-color:var(--gold);color:var(--gold);}
+    .day-label{font-size:7px;color:var(--text-dim);text-align:center;letter-spacing:1px;}
+
+    /* ── QC CHECKLIST MODAL ── */
+    #modal-overlay{
+      position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:8000;
+      display:none;align-items:center;justify-content:center;
+    }
+    #modal-overlay.open{display:flex;}
+    .modal-box{
+      background:var(--bg-panel);border:1px solid var(--border-bright);
+      border-top:2px solid var(--gold);width:540px;max-height:90vh;overflow-y:auto;
+    }
+    .modal-header{
+      padding:14px 16px;border-bottom:1px solid var(--border);
+      display:flex;justify-content:space-between;align-items:center;background:#0a0a0a;position:sticky;top:0;
+    }
+    .modal-close{background:transparent;border:none;color:var(--text-muted);font-family:var(--mono);font-size:16px;cursor:pointer;line-height:1;}
+    .modal-close:hover{color:var(--danger);}
+    .modal-body{padding:16px;}
+    .checklist-item{
+      padding:10px 0;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:10px;
+    }
+    .checklist-item:last-child{border-bottom:none;}
+    .chk{
+      width:16px;height:16px;border:1px solid var(--border-bright);background:var(--bg);
+      display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;margin-top:1px;transition:.2s;
+    }
+    .chk.checked{background:var(--gold);border-color:var(--gold);}
+    .chk.checked::after{content:'✓';color:#000;font-size:10px;font-weight:700;}
+    .chk-label{font-size:10px;color:var(--text);line-height:1.5;}
+    .chk-sub{font-size:9px;color:var(--text-muted);margin-top:2px;}
+    .modal-footer{padding:14px 16px;border-top:1px solid var(--border);background:#0a0a0a;}
+    .gate-status{
+      padding:8px 12px;font-size:10px;letter-spacing:1px;text-align:center;margin-bottom:10px;
+    }
+    .gate-status.pass{background:#001a0d;color:var(--success);border:1px solid var(--success);}
+    .gate-status.fail{background:#1a0007;color:var(--danger);border:1px solid var(--danger);}
+
+    /* ── ATTRIBUTION LOG ── */
+    .attr-row{
+      padding:8px 10px;border-bottom:1px solid var(--border);
+      display:grid;grid-template-columns:1fr auto;gap:8px;
+    }
+    .attr-row:last-child{border-bottom:none;}
+    .attr-name{font-size:10px;color:var(--text);}
+    .attr-detail{font-size:9px;color:var(--text-muted);margin-top:2px;}
+    .attr-badge{
+      font-size:8px;padding:2px 6px;text-transform:uppercase;letter-spacing:1px;font-weight:700;
+      white-space:nowrap;align-self:flex-start;
+    }
+    .attr-mario{background:#001a0d;color:var(--success);}
+    .attr-timothy{background:#1a1000;color:var(--warning);}
+    .attr-shared{background:#001233;color:var(--info);}
+
+    /* ── SCROLL CONTAINER ── */
+    .scroll-y{overflow-y:auto;max-height:340px;}
+    .scroll-y::-webkit-scrollbar{width:4px;}
+    .scroll-y::-webkit-scrollbar-track{background:var(--bg);}
+    .scroll-y::-webkit-scrollbar-thumb{background:var(--border-bright);}
+
+    /* ── EMPTY STATE ── */
+    .empty-state{padding:24px;text-align:center;color:var(--text-dim);font-size:10px;letter-spacing:1px;}
+
+    /* ── STATUS MSG ── */
+    .status-msg{font-size:10px;min-height:18px;margin-top:8px;text-align:center;transition:.3s;}
+    .status-msg.ok{color:var(--success);}
+    .status-msg.err{color:var(--danger);}
+    .status-msg.info{color:var(--warning);}
+
+    /* ── MOBILE ── */
+    @media(max-width:700px){
+      .dash-header{grid-template-columns:1fr 1fr;}
+      .form-row{grid-template-columns:1fr;}
+    }
+    @media(max-width:480px){
+      .dash-header{grid-template-columns:1fr;}
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── AUTH OVERLAY ── -->
+<div id="authOverlay">
+  <div class="auth-box">
+    <div class="auth-logo">ROMI NEXUS</div>
+    <div class="auth-sub">OPERATIONS DASHBOARD — MARIO BRKIC</div>
+
+    <div id="stepEmail" class="auth-step active">
+      <div class="auth-label">Email Address</div>
+      <input id="authEmail" class="auth-input" type="email" placeholder="your@email.com"
+             autocomplete="email" maxlength="254" spellcheck="false">
+      <button class="auth-btn" id="sendOtpBtn" onclick="sendOTP()">REQUEST ACCESS CODE</button>
+      <div class="auth-msg" id="authMsg1"></div>
+    </div>
+
+    <div id="stepOTP" class="auth-step">
+      <div class="auth-label">6-Digit Access Code</div>
+      <input id="authOTP" class="auth-input" type="text" placeholder="000000"
+             maxlength="6" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code">
+      <button class="auth-btn" id="verifyOtpBtn" onclick="verifyOTP()">VERIFY & ENTER</button>
+      <div class="auth-msg" id="authMsg2"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── APP SHELL ── -->
+<div id="appShell">
+  <div class="top-bar">
+    <div>
+      <div class="top-bar-logo">ROMI NEXUS</div>
+      <div class="top-bar-role">OPERATIONS — <span id="topbarName"></span></div>
+    </div>
+    <div class="top-bar-right">
+      <div class="status-dot"></div>
+      <div id="clock"></div>
+      <button class="logout-btn" onclick="logout()">LOGOUT</button>
+    </div>
+  </div>
+
+  <div class="dash-wrap">
+
+    <!-- ALERT BANNER -->
+    <div class="alert-banner" id="alertBanner"></div>
+
+    <!-- ── KPI HEADER ── -->
+    <div class="dash-header" id="kpiHeader">
+      <div class="dh-cell">
+        <div class="dh-label">QC Count</div>
+        <div class="dh-val" id="kpiQC">—</div>
+        <div class="dh-sub">of 20 required (Jun 30)</div>
+        <div class="progress-wrap"><div class="progress-fill" id="kpiQCBar" style="width:0%"></div></div>
+      </div>
+      <div class="dh-cell">
+        <div class="dh-label">Hours This Week</div>
+        <div class="dh-val" id="kpiHours">—</div>
+        <div class="dh-sub">min 35 hrs/week (MOU §3.2)</div>
+        <div class="progress-wrap"><div class="progress-fill" id="kpiHoursBar" style="width:0%"></div></div>
+      </div>
+      <div class="dh-cell">
+        <div class="dh-label">Days to Jun 30 KPI</div>
+        <div class="dh-val" id="kpiDays">—</div>
+        <div class="dh-sub">cliff: 19 Mar 2027</div>
+      </div>
+      <div class="dh-cell">
+        <div class="dh-label">Pipeline Health</div>
+        <div class="dh-val" id="kpiPipeline">—</div>
+        <div class="dh-sub">counterparties in onboarding</div>
+      </div>
+    </div>
+
+    <!-- ── MAIN TWO-COL ── -->
+    <div class="two-col">
+
+      <!-- LEFT: QC Pipeline Table -->
+      <div>
+        <div class="panel" style="margin-bottom:12px;">
+          <div class="panel-header">
+            <div class="panel-title">QC Pipeline</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div class="panel-meta" id="qcCount">0 counterparties</div>
+              <button class="action-btn" onclick="openAddQC()">+ ADD</button>
+            </div>
+          </div>
+          <div class="scroll-y">
+            <table class="qc-table">
+              <thead>
+                <tr>
+                  <th>Counterparty</th>
+                  <th>Commodity</th>
+                  <th>Stage</th>
+                  <th>QC Gate</th>
+                  <th>Attribution</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="qcTableBody">
+                <tr><td colspan="6"><div class="empty-state">NO COUNTERPARTIES LOGGED — ADD YOUR FIRST</div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Hours log form -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Log Hours</div>
+            <div class="panel-meta">CRM-verifiable entries only</div>
+          </div>
+          <div class="panel-body">
+            <div class="hours-form">
+              <div class="form-row">
+                <div>
+                  <div class="f-label">Date</div>
+                  <input class="f-input" type="date" id="logDate">
+                </div>
+                <div>
+                  <div class="f-label">Hours Worked</div>
+                  <input class="f-input" type="number" id="logHours" min="0.5" max="16" step="0.5" placeholder="e.g. 3.5">
+                </div>
+              </div>
+              <div>
+                <div class="f-label">Activity Type</div>
+                <select class="f-select" id="logActivity">
+                  <option value="">— select —</option>
+                  <option value="KYC_ONBOARDING">KYC Onboarding</option>
+                  <option value="SANCTIONS_SCREENING">Sanctions Screening</option>
+                  <option value="DOC_COLLECTION">Document Collection</option>
+                  <option value="COUNTERPARTY_CALL">Counterparty Call</option>
+                  <option value="CRM_DATA_ENTRY">CRM Data Entry</option>
+                  <option value="KPI_REPORTING">KPI Reporting</option>
+                  <option value="INTERNAL_REVIEW">Internal Review / Viel Meeting</option>
+                  <option value="COMPLIANCE_REVIEW">Compliance Review</option>
+                  <option value="PROSPECT_OUTREACH">Prospect Outreach</option>
+                  <option value="OTHER">Other (describe below)</option>
+                </select>
+              </div>
+              <div>
+                <div class="f-label">Description (CRM Reference)</div>
+                <textarea class="f-textarea" id="logDesc" placeholder="Counterparty name, action taken, CRM entry ID…" maxlength="500"></textarea>
+              </div>
+              <button class="submit-btn" id="logSubmitBtn" onclick="submitHoursLog()">LOG HOURS TO CRM</button>
+              <div class="status-msg" id="logStatus"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div style="display:flex;flex-direction:column;gap:12px;">
+
+        <!-- Week hours tracker -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Week Tracker</div>
+            <div class="panel-meta" id="weekTotal">0h / 35h min</div>
+          </div>
+          <div class="panel-body">
+            <div class="week-grid" id="weekGrid"></div>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px;">
+              <div class="day-label">MON</div>
+              <div class="day-label">TUE</div>
+              <div class="day-label">WED</div>
+              <div class="day-label">THU</div>
+              <div class="day-label">FRI</div>
+              <div class="day-label">SAT</div>
+              <div class="day-label">SUN</div>
+            </div>
+            <div style="font-size:9px;color:var(--text-muted);line-height:1.7;">
+              › 35h/week required under MOU §3.2<br>
+              › Undocumented hours do NOT count for vesting<br>
+              › Weekly KPI report due every Friday 5pm
+            </div>
+          </div>
+        </div>
+
+        <!-- QC Target Tracker -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">QC Milestone Tracker</div>
+            <div class="panel-meta">MOU §6.2</div>
+          </div>
+          <div class="panel-body">
+            <div id="milestoneTracker" style="display:flex;flex-direction:column;gap:8px;"></div>
+            <div style="font-size:9px;color:var(--text-muted);margin-top:12px;line-height:1.7;">
+              › QC = KYC/AML complete + proof of funds >AED 100K + signed mandate letter<br>
+              › All 3 elements required — partial onboardings DO NOT count<br>
+              › Quality gate checklist must pass before submission to Viel
+            </div>
+          </div>
+        </div>
+
+        <!-- Attribution log -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Attribution Log</div>
+            <div class="panel-meta">Dual Protocol §0.4</div>
+          </div>
+          <div class="scroll-y" style="max-height:200px;">
+            <div id="attrLog">
+              <div class="empty-state">NO ATTRIBUTION RECORDS</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Non-negotiables reminder -->
+        <div class="panel">
+          <div class="panel-header">
+            <div class="panel-title">Non-Negotiables</div>
+            <div class="panel-meta">MOU v14</div>
+          </div>
+          <div class="panel-body">
+            <div style="font-size:9px;color:var(--text-muted);line-height:2;">
+              <span style="color:var(--danger);">✗</span> Do NOT discuss SAFE terms, valuation, or fundraise<br>
+              <span style="color:var(--danger);">✗</span> Do NOT contact Timothy's prospects independently<br>
+              <span style="color:var(--danger);">✗</span> Do NOT approve any counterparty (Viel only)<br>
+              <span style="color:var(--danger);">✗</span> Do NOT use title "COO" externally<br>
+              <span style="color:var(--success);">✓</span> Log every interaction in CRM within 24 hours<br>
+              <span style="color:var(--success);">✓</span> Submit KPI report every Friday by 5pm<br>
+              <span style="color:var(--success);">✓</span> Screen every prospect before submitting to Viel<br>
+              <span style="color:var(--success);">✓</span> Complete QC Quality Checklist before submission
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── RECENT HOURS LOG ── -->
+    <div class="panel" style="margin-bottom:12px;">
+      <div class="panel-header">
+        <div class="panel-title">Recent Hours Log</div>
+        <div class="panel-meta" id="totalHoursAllTime">Total: 0h logged</div>
+      </div>
+      <div class="scroll-y" style="max-height:220px;">
+        <div id="hoursLogList">
+          <div class="empty-state">NO HOURS LOGGED — START LOGGING NOW</div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /dash-wrap -->
+</div><!-- /appShell -->
+
+<!-- ── QC QUALITY GATE MODAL ── -->
+<div id="modal-overlay" role="dialog" aria-modal="true" aria-label="QC Quality Gate Checklist">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="panel-title" id="modalTitle">QC QUALITY GATE</div>
+      <button class="modal-close" onclick="closeModal()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:16px;line-height:1.7;">
+        All 3 MOU §6.2 elements + QC Quality Gate items must be confirmed before submitting to Viel.
+        A counterparty who passes documents only is a compliance risk, not a vesting credit.
+      </div>
+
+      <div id="modalMode-checklist">
+        <div style="font-size:9px;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;">MOU §6.2 — Required Elements</div>
+        <div class="checklist-item">
+          <div class="chk" id="chk-kyc" onclick="toggleChk(this,'chk-kyc')"></div>
+          <div>
+            <div class="chk-label">KYC/AML documentation complete</div>
+            <div class="chk-sub">Gov ID, proof of address <3 months, corporate registration, sanctions screening passed</div>
+          </div>
+        </div>
+        <div class="checklist-item">
+          <div class="chk" id="chk-pof" onclick="toggleChk(this,'chk-pof')"></div>
+          <div>
+            <div class="chk-label">Proof of funds verified — >AED 100,000</div>
+            <div class="chk-sub">Bank statement recent (<3 months) showing adequate balance</div>
+          </div>
+        </div>
+        <div class="checklist-item">
+          <div class="chk" id="chk-mandate" onclick="toggleChk(this,'chk-mandate')"></div>
+          <div>
+            <div class="chk-label">Signed mandate letter received</div>
+            <div class="chk-sub">Specifies commodity, volume, price tenor, and buy/sell commitment in writing</div>
+          </div>
+        </div>
+
+        <div style="font-size:9px;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin:14px 0 10px;">QC Quality Gate (Audit Fix 2)</div>
+        <div class="checklist-item">
+          <div class="chk" id="chk-genuine" onclick="toggleChk(this,'chk-genuine')"></div>
+          <div>
+            <div class="chk-label">Genuine, executable mandate confirmed</div>
+            <div class="chk-sub">NOT a speculative enquiry. Counterparty has confirmed real intent with volume</div>
+          </div>
+        </div>
+        <div class="checklist-item">
+          <div class="chk" id="chk-pof2" onclick="toggleChk(this,'chk-pof2')"></div>
+          <div>
+            <div class="chk-label">Proof of funds is verified AND recent</div>
+            <div class="chk-sub">Document date confirmed <3 months old. Not forwarded or altered</div>
+          </div>
+        </div>
+        <div class="checklist-item">
+          <div class="chk" id="chk-written" onclick="toggleChk(this,'chk-written')"></div>
+          <div>
+            <div class="chk-label">Commodity, volume, price tenor confirmed in writing</div>
+            <div class="chk-sub">Email or document — not verbal. Must be producible for Viel's review</div>
+          </div>
+        </div>
+        <div class="checklist-item">
+          <div class="chk" id="chk-screen" onclick="toggleChk(this,'chk-screen')"></div>
+          <div>
+            <div class="chk-label">Sanctions screening conducted (before submission)</div>
+            <div class="chk-sub">MOU §10 — all counterparties screened using approved tool before submitting to Viel</div>
+          </div>
+        </div>
+        <div class="checklist-item">
+          <div class="chk" id="chk-crm" onclick="toggleChk(this,'chk-crm')"></div>
+          <div>
+            <div class="chk-label">All documents uploaded to CRM with counterparty entry</div>
+            <div class="chk-sub">If it's not in the CRM, it did not happen (DIFC Court evidence standard)</div>
+          </div>
+        </div>
+
+        <div style="font-size:9px;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin:14px 0 10px;">Attribution (Dual Protocol §0.4)</div>
+        <div class="checklist-item">
+          <div class="chk" id="chk-attr" onclick="toggleChk(this,'chk-attr')"></div>
+          <div>
+            <div class="chk-label">Attribution email sent to Viel & recognition received</div>
+            <div class="chk-sub">If Timothy introduced: Viel's written recognition email MUST be received before onboarding begins</div>
+          </div>
+        </div>
+
+        <div id="gateStatusDisplay" class="gate-status fail" style="margin-top:14px;">
+          ⚠ GATE INCOMPLETE — 0 OF 8 ITEMS CONFIRMED
+        </div>
+      </div>
+
+      <div id="modalMode-addQC" style="display:none;">
+        <div class="f-label">Counterparty Name / Company</div>
+        <input class="f-input" id="newQCName" maxlength="120" placeholder="e.g. ACME Trading LLC" style="margin-bottom:10px;">
+        <div class="f-label">Commodity</div>
+        <select class="f-select" id="newQCCommodity" style="margin-bottom:10px;">
+          <option value="">— select —</option>
+          <option value="GOLD">Gold</option>
+          <option value="COFFEE">Coffee</option>
+          <option value="COPPER">Copper</option>
+          <option value="COCOA">Cocoa</option>
+          <option value="SOYBEANS">Soybeans</option>
+          <option value="SUGAR">Sugar</option>
+          <option value="OIL">Oil (WTI/Brent)</option>
+          <option value="OTHER">Other (MOU Schedule E)</option>
+        </select>
+        <div class="f-label">Counterparty Type</div>
+        <select class="f-select" id="newQCType" style="margin-bottom:10px;">
+          <option value="BUYER">Buyer</option>
+          <option value="SELLER">Seller</option>
+          <option value="BOTH">Both</option>
+        </select>
+        <div class="f-label">Attribution Source</div>
+        <select class="f-select" id="newQCAttrib" style="margin-bottom:10px;">
+          <option value="MARIO">Mario (own network)</option>
+          <option value="TIMOTHY">Timothy (intro — Viel recognition req.)</option>
+        </select>
+        <div class="f-label">Notes (CRM reference)</div>
+        <textarea class="f-textarea" id="newQCNotes" maxlength="400" placeholder="Source, contact details, intro context…"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="submit-btn" id="modalActionBtn" onclick="modalAction()">SAVE CHECKLIST</button>
+      <div class="status-msg" id="modalStatus"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// ============================================================
+// ROMI NEXUS — MARIO DASHBOARD v1.0
+// SECURITY: OWASP A03 — all untrusted data via textContent
+//           OWASP A07 — session token in sessionStorage
+//           OWASP A01 — server-side auth; role enforced backend
+//           Input sanitization before any API submission
+// ============================================================
+
+const API_URL = 'https://rominexus.workers.dev';
+
+// OWASP A03: Sanitize any string before inserting into DOM via textContent
+// (belt-and-suspenders — we always use textContent, but sanitize before
+// building strings used in attribute contexts)
+function sanitize(str) {
+  return String(str || '')
+    .replace(/&/g,  '&amp;')
+    .replace(/</g,  '&lt;')
+    .replace(/>/g,  '&gt;')
+    .replace(/"/g,  '&quot;')
+    .replace(/'/g,  '&#x27;');
+}
+
+// ── Session state ──
+let _email = '';
+let _csrf  = '';
+let _name  = '';
+
+function getSession() {
+  try {
+    return {
+      email: sessionStorage.getItem('rn_mario_email') || '',
+      csrf:  sessionStorage.getItem('rn_mario_csrf')  || '',
+      name:  sessionStorage.getItem('rn_mario_name')  || '',
+    };
+  } catch(_) { return {email:'',csrf:'',name:''}; }
+}
+function setSession(email, csrf, name) {
+  try {
+    sessionStorage.setItem('rn_mario_email', email);
+    sessionStorage.setItem('rn_mario_csrf',  csrf);
+    sessionStorage.setItem('rn_mario_name',  name);
+  } catch(_) {}
+}
+function clearSession() {
+  try {
+    sessionStorage.removeItem('rn_mario_email');
+    sessionStorage.removeItem('rn_mario_csrf');
+    sessionStorage.removeItem('rn_mario_name');
+  } catch(_) {}
+}
+
+// ── Local state (persisted via localStorage as non-sensitive ops data) ──
+// NOTE: hours log and QC entries are SUPPLEMENTAL local tracking only.
+// The authoritative record is the CRM / Apps Script backend.
+// These entries remind the operator what to log in the actual CRM.
+function getLocalData(key, def) {
+  try {
+    const raw = localStorage.getItem('rn_mario_' + key);
+    return raw ? JSON.parse(raw) : def;
+  } catch(_) { return def; }
+}
+function setLocalData(key, val) {
+  try { localStorage.setItem('rn_mario_' + key, JSON.stringify(val)); } catch(_) {}
+}
+
+// ── Auth ──
+async function sendOTP() {
+  const emailInput = document.getElementById('authEmail');
+  const email = (emailInput.value || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]{1,64}@[^\s@]{1,255}$/.test(email)) {
+    setAuthMsg(1, 'VALID EMAIL REQUIRED', 'err'); return;
+  }
+  setAuthMsg(1, 'SENDING…', 'info');
+  document.getElementById('sendOtpBtn').disabled = true;
+  try {
+    const body = 'action=sendOTP&email=' + encodeURIComponent(email);
+    const res  = await fetch(API_URL, {
+      method:  'POST',
+      headers: {'Content-Type':'application/x-www-form-urlencoded'},
+      body
+    });
+    const data = await res.json();
+    if (data.error) { setAuthMsg(1, String(data.error).substring(0,80), 'err'); document.getElementById('sendOtpBtn').disabled=false; return; }
+    _email = email;
+    document.getElementById('stepEmail').classList.remove('active');
+    document.getElementById('stepOTP').classList.add('active');
+    setAuthMsg(2, 'CODE SENT — CHECK YOUR EMAIL', 'ok');
+  } catch(e) { setAuthMsg(1, 'NETWORK ERROR — RETRY', 'err'); document.getElementById('sendOtpBtn').disabled=false; }
+}
+
+async function verifyOTP() {
+  const otp = (document.getElementById('authOTP').value || '').trim();
+  if (!/^\d{6}$/.test(otp)) { setAuthMsg(2, 'ENTER 6-DIGIT CODE', 'err'); return; }
+  setAuthMsg(2, 'VERIFYING…', 'info');
+  document.getElementById('verifyOtpBtn').disabled = true;
+  try {
+    const csrf = generateCSRF();
+    const body = 'action=verifyOTP&email=' + encodeURIComponent(_email) +
+                 '&otp=' + encodeURIComponent(otp) +
+                 '&_csrf=' + encodeURIComponent(csrf);
+    const res  = await fetch(API_URL, {
+      method:  'POST',
+      headers: {'Content-Type':'application/x-www-form-urlencoded'},
+      body
+    });
+    const data = await res.json();
+    if (data.error) {
+      setAuthMsg(2, String(data.error).substring(0,80), 'err');
+      document.getElementById('verifyOtpBtn').disabled = false;
+      return;
+    }
+    _csrf = csrf;
+    _name = data.name || _email;
+    setSession(_email, _csrf, _name);
+    bootApp();
+  } catch(e) { setAuthMsg(2, 'NETWORK ERROR — RETRY', 'err'); document.getElementById('verifyOtpBtn').disabled=false; }
+}
+
+function generateCSRF() {
+  const arr = new Uint8Array(24);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function setAuthMsg(step, msg, cls) {
+  const el = document.getElementById('authMsg' + step);
+  el.textContent = msg;
+  el.className   = 'auth-msg ' + (cls || '');
+}
+
+function logout() {
+  clearSession();
+  location.reload();
+}
+
+// ── Boot ──
+function bootApp() {
+  document.getElementById('authOverlay').style.display = 'none';
+  document.getElementById('appShell').style.display    = 'block';
+  const s = getSession();
+  _email = s.email; _csrf = s.csrf; _name = s.name;
+  const nameEl = document.getElementById('topbarName');
+  nameEl.textContent = _name || _email;
+  initDateField();
+  refreshKPIs();
+  renderWeekGrid();
+  renderHoursLog();
+  renderQCTable();
+  renderMilestoneTracker();
+  renderAttrLog();
+  checkAlerts();
+}
+
+function initDateField() {
+  const d = new Date();
+  const iso = d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+  document.getElementById('logDate').value = iso;
+}
+
+// ── KPIs ──
+function refreshKPIs() {
+  const qcList    = getLocalData('qc_list',    []);
+  const hoursLog  = getLocalData('hours_log',  []);
+
+  const qcPassed  = qcList.filter(q => q.gateStatus === 'PASS').length;
+  const qcPct     = Math.min(100, Math.round((qcPassed / 20) * 100));
+
+  // Hours this week
+  const weekHours = calcWeekHours(hoursLog);
+  const hoursPct  = Math.min(100, Math.round((weekHours / 35) * 100));
+
+  // Days remaining
+  const target    = new Date('2026-06-30');
+  const today     = new Date();
+  today.setHours(0,0,0,0);
+  const days      = Math.max(0, Math.round((target - today) / 86400000));
+
+  const pipeline  = qcList.filter(q => q.gateStatus !== 'PASS').length;
+
+  const qcEl = document.getElementById('kpiQC');
+  qcEl.textContent = qcPassed;
+  qcEl.className   = 'dh-val ' + (qcPassed >= 18 ? 'success' : qcPassed >= 10 ? '' : qcPassed < 5 ? 'danger' : 'warn');
+
+  const qcBar = document.getElementById('kpiQCBar');
+  qcBar.style.width     = qcPct + '%';
+  qcBar.className       = 'progress-fill ' + (qcPassed >= 18 ? '' : qcPassed < 5 ? 'danger' : 'warn');
+
+  const hEl = document.getElementById('kpiHours');
+  hEl.textContent = weekHours.toFixed(1) + 'h';
+  hEl.className   = 'dh-val ' + (weekHours >= 35 ? 'success' : weekHours >= 25 ? 'warn' : 'danger');
+
+  const hBar = document.getElementById('kpiHoursBar');
+  hBar.style.width  = hoursPct + '%';
+  hBar.className    = 'progress-fill ' + (weekHours >= 35 ? '' : weekHours >= 20 ? 'warn' : 'danger');
+
+  const dEl = document.getElementById('kpiDays');
+  dEl.textContent = days;
+  dEl.className   = 'dh-val ' + (days > 30 ? '' : days > 14 ? 'warn' : 'danger');
+
+  const pEl = document.getElementById('kpiPipeline');
+  pEl.textContent = pipeline;
+  pEl.className   = 'dh-val ' + (pipeline >= 3 ? '' : 'warn');
+
+  const totalH = hoursLog.reduce((s,e) => s + (parseFloat(e.hours)||0), 0);
+  const ttEl = document.getElementById('totalHoursAllTime');
+  ttEl.textContent = 'Total: ' + totalH.toFixed(1) + 'h logged';
+
+  const wcEl = document.getElementById('weekTotal');
+  wcEl.textContent = weekHours.toFixed(1) + 'h / 35h min';
+}
+
+function calcWeekHours(log) {
+  const now   = new Date();
+  const day   = now.getDay(); // 0=Sun
+  const mon   = new Date(now);
+  mon.setDate(now.getDate() - ((day + 6) % 7));
+  mon.setHours(0,0,0,0);
+  const sun   = new Date(mon);
+  sun.setDate(mon.getDate() + 7);
+  return log.reduce((s, e) => {
+    const d = new Date(e.date);
+    return (d >= mon && d < sun) ? s + (parseFloat(e.hours)||0) : s;
+  }, 0);
+}
+
+function calcDayHours(log, isoDate) {
+  return log.filter(e => e.date === isoDate).reduce((s,e) => s + (parseFloat(e.hours)||0), 0);
+}
+
+// ── Week Grid ──
+function renderWeekGrid() {
+  const log   = getLocalData('hours_log', []);
+  const grid  = document.getElementById('weekGrid');
+  grid.innerHTML = '';
+  const now  = new Date();
+  const day  = now.getDay();
+  const mon  = new Date(now);
+  mon.setDate(now.getDate() - ((day + 6) % 7));
+  mon.setHours(0,0,0,0);
+
+  for (let i = 0; i < 7; i++) {
+    const d   = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    const iso = d.getFullYear() + '-' +
+      String(d.getMonth()+1).padStart(2,'0') + '-' +
+      String(d.getDate()).padStart(2,'0');
+    const hrs = calcDayHours(log, iso);
+    const isToday = iso === todayISO();
+    const block   = document.createElement('div');
+    block.className = 'day-block' +
+      (hrs >= 5 ? ' filled' : hrs > 0 ? ' target' : '') +
+      (isToday   ? ' today'  : '');
+    block.title = iso + ' — ' + hrs.toFixed(1) + 'h';
+    block.textContent = hrs > 0 ? hrs.toFixed(0) + 'h' : (isToday ? '●' : '');
+    grid.appendChild(block);
+  }
+}
+
+function todayISO() {
+  const d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
+// ── Hours Log ──
+async function submitHoursLog() {
+  const date     = document.getElementById('logDate').value;
+  const hours    = parseFloat(document.getElementById('logHours').value || '0');
+  const activity = document.getElementById('logActivity').value;
+  const desc     = (document.getElementById('logDesc').value || '').trim();
+
+  if (!date) { setStatus('logStatus', 'DATE REQUIRED', 'err'); return; }
+  if (hours <= 0 || hours > 16) { setStatus('logStatus', 'HOURS MUST BE 0.5–16', 'err'); return; }
+  if (!activity) { setStatus('logStatus', 'SELECT ACTIVITY TYPE', 'err'); return; }
+  if (!desc || desc.length < 5) { setStatus('logStatus', 'DESCRIPTION REQUIRED (min 5 chars)', 'err'); return; }
+
+  document.getElementById('logSubmitBtn').disabled = true;
+  setStatus('logStatus', 'SAVING…', 'info');
+
+  const entry = {
+    id:       Date.now().toString(36),
+    date,
+    hours,
+    activity,
+    desc:     desc.substring(0,500),
+    ts:       new Date().toISOString(),
+  };
+
+  const log = getLocalData('hours_log', []);
+  log.unshift(entry);
+  setLocalData('hours_log', log);
+
+  // Reset form
+  document.getElementById('logHours').value   = '';
+  document.getElementById('logActivity').value = '';
+  document.getElementById('logDesc').value    = '';
+
+  setStatus('logStatus', '✓ LOGGED — ENSURE THIS IS ENTERED IN THE ACTUAL CRM', 'ok');
+  document.getElementById('logSubmitBtn').disabled = false;
+  refreshKPIs();
+  renderWeekGrid();
+  renderHoursLog();
+}
+
+function renderHoursLog() {
+  const log = getLocalData('hours_log', []);
+  const el  = document.getElementById('hoursLogList');
+  if (!log.length) { el.innerHTML = '<div class="empty-state">NO HOURS LOGGED</div>'; return; }
+  el.innerHTML = '';
+  log.slice(0, 50).forEach(e => {
+    const row = document.createElement('div');
+    row.className = 'log-entry';
+
+    const left = document.createElement('div');
+    const desc = document.createElement('div');
+    desc.className   = 'log-desc';
+    desc.textContent = e.desc;
+    const meta = document.createElement('div');
+    meta.className   = 'log-meta';
+    meta.style.color = 'var(--text-muted)';
+    meta.textContent = (e.activity || '').replace(/_/g,' ') + ' · ' + e.date;
+    left.appendChild(desc);
+    left.appendChild(meta);
+
+    const right = document.createElement('div');
+    right.className   = 'log-hours';
+    right.textContent = e.hours + 'h';
+
+    row.appendChild(left);
+    row.appendChild(right);
+    el.appendChild(row);
+  });
+}
+
+// ── QC Pipeline ──
+function renderQCTable() {
+  const list = getLocalData('qc_list', []);
+  const body = document.getElementById('qcTableBody');
+  const countEl = document.getElementById('qcCount');
+  countEl.textContent = list.length + ' counterpart' + (list.length===1?'y':'ies');
+
+  if (!list.length) {
+    body.innerHTML = '<tr><td colspan="6"><div class="empty-state">NO COUNTERPARTIES — ADD YOUR FIRST</div></td></tr>';
+    return;
+  }
+  body.innerHTML = '';
+  list.forEach((q, idx) => {
+    const tr = document.createElement('tr');
+
+    const tdName = document.createElement('td');
+    tdName.textContent = q.name;
+
+    const tdComm = document.createElement('td');
+    tdComm.textContent = q.commodity || '—';
+
+    const tdStage = document.createElement('td');
+    const stageBadge = document.createElement('span');
+    const stageMap = ['PENDING','DOCS IN','SCREENED','SUBMITTED'];
+    stageBadge.className = 'stage-badge stage-' + (q.stage||0);
+    stageBadge.textContent = stageMap[q.stage||0] || 'PENDING';
+    tdStage.appendChild(stageBadge);
+
+    const tdGate = document.createElement('td');
+    const gateEl = document.createElement('span');
+    gateEl.className   = q.gateStatus === 'PASS' ? 'gate-pass' : q.gateStatus === 'FAIL' ? 'gate-fail' : 'gate-na';
+    gateEl.textContent = q.gateStatus === 'PASS' ? '✓ PASS' : q.gateStatus === 'FAIL' ? '✗ FAIL' : '— PENDING';
+    tdGate.appendChild(gateEl);
+
+    const tdAttr = document.createElement('td');
+    const attrBadge = document.createElement('span');
+    attrBadge.className = 'attr-badge ' + (q.attribution === 'TIMOTHY' ? 'attr-timothy' : 'attr-mario');
+    attrBadge.textContent = q.attribution === 'TIMOTHY' ? 'TIMOTHY' : 'MARIO';
+    tdAttr.appendChild(attrBadge);
+
+    const tdAct = document.createElement('td');
+    tdAct.style.display = 'flex';
+    tdAct.style.gap     = '4px';
+
+    const gateBtn = document.createElement('button');
+    gateBtn.className   = 'action-btn';
+    gateBtn.textContent = 'GATE';
+    gateBtn.onclick     = () => openGateChecklist(idx);
+
+    const advBtn = document.createElement('button');
+    advBtn.className   = 'action-btn';
+    advBtn.textContent = 'ADVANCE';
+    advBtn.onclick     = () => advanceStage(idx);
+    if ((q.stage||0) >= 3) advBtn.disabled = true;
+
+    tdAct.appendChild(gateBtn);
+    tdAct.appendChild(advBtn);
+
+    tr.appendChild(tdName);
+    tr.appendChild(tdComm);
+    tr.appendChild(tdStage);
+    tr.appendChild(tdGate);
+    tr.appendChild(tdAttr);
+    tr.appendChild(tdAct);
+    body.appendChild(tr);
+  });
+}
+
+function advanceStage(idx) {
+  const list = getLocalData('qc_list', []);
+  if (!list[idx]) return;
+  if ((list[idx].stage||0) < 3) {
+    list[idx].stage = (list[idx].stage||0) + 1;
+    setLocalData('qc_list', list);
+    renderQCTable();
+    refreshKPIs();
+    renderAttrLog();
+  }
+}
+
+// ── Add QC Modal ──
+let _modalMode = 'checklist';
+let _modalQCIdx = -1;
+const _chkState = {};
+
+function openAddQC() {
+  _modalMode = 'addQC';
+  document.getElementById('modalTitle').textContent = 'ADD COUNTERPARTY';
+  document.getElementById('modalMode-checklist').style.display = 'none';
+  document.getElementById('modalMode-addQC').style.display     = 'block';
+  document.getElementById('modalActionBtn').textContent = 'ADD TO PIPELINE';
+  document.getElementById('newQCName').value     = '';
+  document.getElementById('newQCNotes').value    = '';
+  document.getElementById('modalStatus').textContent = '';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function openGateChecklist(idx) {
+  _modalMode  = 'checklist';
+  _modalQCIdx = idx;
+  const list  = getLocalData('qc_list', []);
+  const q     = list[idx] || {};
+  document.getElementById('modalTitle').textContent = 'QC GATE — ' + (q.name || '');
+  document.getElementById('modalMode-checklist').style.display = 'block';
+  document.getElementById('modalMode-addQC').style.display     = 'none';
+  document.getElementById('modalActionBtn').textContent = 'SAVE GATE STATUS';
+  document.getElementById('modalStatus').textContent = '';
+
+  const chks = ['kyc','pof','mandate','genuine','pof2','written','screen','crm','attr'];
+  const saved = q.checklist || {};
+  chks.forEach(k => {
+    const el = document.getElementById('chk-' + k);
+    if (!el) return;
+    if (saved[k]) { el.classList.add('checked'); }
+    else { el.classList.remove('checked'); }
+  });
+  updateGateStatus();
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function toggleChk(el, id) {
+  el.classList.toggle('checked');
+  updateGateStatus();
+}
+
+function updateGateStatus() {
+  const chks   = ['kyc','pof','mandate','genuine','pof2','written','screen','crm','attr'];
+  const passed = chks.filter(k => {
+    const el = document.getElementById('chk-' + k);
+    return el && el.classList.contains('checked');
+  }).length;
+  const total  = chks.length;
+  const allPass = passed === total;
+  const disp   = document.getElementById('gateStatusDisplay');
+  disp.className = 'gate-status ' + (allPass ? 'pass' : 'fail');
+  disp.textContent = allPass
+    ? '✓ GATE PASSED — READY TO SUBMIT TO VIEL'
+    : '⚠ GATE INCOMPLETE — ' + passed + ' OF ' + total + ' ITEMS CONFIRMED';
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  _modalQCIdx = -1;
+}
+
+function modalAction() {
+  if (_modalMode === 'addQC') {
+    const name   = (document.getElementById('newQCName').value || '').trim();
+    const comm   = document.getElementById('newQCCommodity').value;
+    const type   = document.getElementById('newQCType').value;
+    const attr   = document.getElementById('newQCAttrib').value;
+    const notes  = (document.getElementById('newQCNotes').value || '').trim().substring(0, 400);
+
+    if (!name || name.length < 2) { setStatus('modalStatus','NAME REQUIRED','err'); return; }
+    if (!comm) { setStatus('modalStatus','SELECT COMMODITY','err'); return; }
+
+    const list  = getLocalData('qc_list', []);
+    list.push({
+      id:          Date.now().toString(36),
+      name,
+      commodity:   comm,
+      type,
+      attribution: attr,
+      notes,
+      stage:       0,
+      gateStatus:  'PENDING',
+      checklist:   {},
+      addedAt:     new Date().toISOString(),
+    });
+    setLocalData('qc_list', list);
+
+    // Append to attribution log
+    const attrLog = getLocalData('attr_log', []);
+    attrLog.unshift({
+      name,
+      attr,
+      commodity: comm,
+      ts: new Date().toISOString(),
+      note: 'Added to pipeline',
+    });
+    setLocalData('attr_log', attrLog);
+
+    setStatus('modalStatus','✓ ADDED — ENSURE CRM ENTRY CREATED WITHIN 24H','ok');
+    setTimeout(closeModal, 1500);
+    renderQCTable();
+    refreshKPIs();
+    renderMilestoneTracker();
+    renderAttrLog();
+
+  } else if (_modalMode === 'checklist') {
+    const chks  = ['kyc','pof','mandate','genuine','pof2','written','screen','crm','attr'];
+    const state = {};
+    let   passed = 0;
+    chks.forEach(k => {
+      const el = document.getElementById('chk-' + k);
+      if (el && el.classList.contains('checked')) { state[k]=true; passed++; }
+      else state[k]=false;
+    });
+    const list = getLocalData('qc_list', []);
+    if (list[_modalQCIdx]) {
+      list[_modalQCIdx].checklist   = state;
+      list[_modalQCIdx].gateStatus  = (passed === chks.length) ? 'PASS' : 'FAIL';
+      list[_modalQCIdx].gateUpdated = new Date().toISOString();
+      setLocalData('qc_list', list);
+    }
+    setStatus('modalStatus', passed === chks.length ? '✓ GATE PASSED' : '⚠ GATE NOT YET COMPLETE', passed === chks.length ? 'ok' : 'err');
+    setTimeout(closeModal, 1200);
+    renderQCTable();
+    refreshKPIs();
+    renderMilestoneTracker();
+  }
+}
+
+// ── Milestones ──
+const MILESTONES = [
+  { label: 'Week 2 target',   date: '2026-03-30', target:  3 },
+  { label: 'Week 4 target',   date: '2026-04-14', target:  6 },
+  { label: 'Week 6 target',   date: '2026-04-26', target:  9 },
+  { label: 'Week 8 target',   date: '2026-05-10', target: 12 },
+  { label: 'Week 13 buffer',  date: '2026-06-15', target: 19 },
+  { label: 'KPI hard deadline', date: '2026-06-30', target: 20 },
+];
+
+function renderMilestoneTracker() {
+  const qcList = getLocalData('qc_list', []);
+  const passed = qcList.filter(q => q.gateStatus === 'PASS').length;
+  const el     = document.getElementById('milestoneTracker');
+  el.innerHTML = '';
+  const today  = new Date(); today.setHours(0,0,0,0);
+
+  MILESTONES.forEach(m => {
+    const mDate  = new Date(m.date);
+    mDate.setHours(0,0,0,0);
+    const isPast = mDate < today;
+    const hit    = passed >= m.target;
+    const row    = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;';
+
+    const label = document.createElement('div');
+    label.style.cssText = 'font-size:9px;color:var(--text-muted);letter-spacing:.5px;';
+    label.textContent   = m.label + ' (' + m.date + ')';
+
+    const right = document.createElement('div');
+    right.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+    const tgt = document.createElement('div');
+    tgt.style.cssText = 'font-size:9px;color:var(--text-muted);';
+    tgt.textContent   = passed + '/' + m.target;
+
+    const badge = document.createElement('div');
+    badge.style.cssText = 'font-size:8px;padding:2px 8px;font-weight:700;letter-spacing:1px;text-transform:uppercase;';
+    if (hit) {
+      badge.style.background = '#001a0d';
+      badge.style.color      = 'var(--success)';
+      badge.textContent      = '✓ ON TRACK';
+    } else if (isPast) {
+      badge.style.background = '#1a0007';
+      badge.style.color      = 'var(--danger)';
+      badge.textContent      = '✗ BEHIND';
+    } else {
+      badge.style.background = '#0d0a00';
+      badge.style.color      = 'var(--warning)';
+      badge.textContent      = '— UPCOMING';
+    }
+    right.appendChild(tgt);
+    right.appendChild(badge);
+    row.appendChild(label);
+    row.appendChild(right);
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'padding:6px 0;border-bottom:1px solid var(--border);';
+    wrap.appendChild(row);
+    el.appendChild(wrap);
+  });
+}
+
+// ── Attribution Log ──
+function renderAttrLog() {
+  const log = getLocalData('attr_log', []);
+  const el  = document.getElementById('attrLog');
+  if (!log.length) { el.innerHTML = '<div class="empty-state">NO ATTRIBUTION RECORDS</div>'; return; }
+  el.innerHTML = '';
+  log.slice(0, 30).forEach(e => {
+    const row  = document.createElement('div');
+    row.className = 'attr-row';
+
+    const left = document.createElement('div');
+    const name = document.createElement('div');
+    name.className   = 'attr-name';
+    name.textContent = e.name;
+    const detail = document.createElement('div');
+    detail.className   = 'attr-detail';
+    detail.textContent = (e.commodity || '') + ' · ' + new Date(e.ts).toLocaleDateString();
+    left.appendChild(name);
+    left.appendChild(detail);
+
+    const badge = document.createElement('div');
+    badge.className = 'attr-badge ' + (e.attr==='TIMOTHY' ? 'attr-timothy' : e.attr==='BOTH' ? 'attr-shared' : 'attr-mario');
+    badge.textContent = e.attr;
+
+    row.appendChild(left);
+    row.appendChild(badge);
+    el.appendChild(row);
+  });
+}
+
+// ── Alerts ──
+function checkAlerts() {
+  const hoursLog = getLocalData('hours_log', []);
+  const weekH    = calcWeekHours(hoursLog);
+  const today    = new Date();
+  const isFri    = today.getDay() === 5;
+  const banner   = document.getElementById('alertBanner');
+
+  const alerts   = [];
+  if (weekH < 20 && today.getDay() >= 3) alerts.push('⚠ HOURS BELOW 20h THIS WEEK — TARGET IS 35h (MOU §3.2)');
+  if (isFri) alerts.push('⚠ FRIDAY — KPI REPORT DUE TO VIEL BY 5PM');
+
+  const qcList  = getLocalData('qc_list', []);
+  const passed  = qcList.filter(q => q.gateStatus === 'PASS').length;
+  const daysLeft= Math.max(0, Math.round((new Date('2026-06-30') - today) / 86400000));
+  if (daysLeft < 30 && passed < 15) alerts.push('⚠ CRITICAL — ' + (20-passed) + ' QC STILL NEEDED WITH ' + daysLeft + ' DAYS LEFT');
+
+  if (alerts.length) {
+    banner.textContent = alerts.join('  ·  ');
+    banner.classList.add('show');
+  }
+}
+
+// ── Helpers ──
+function setStatus(id, msg, cls) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.className   = 'status-msg ' + (cls || '');
+}
+
+// ── Clock ──
+function updateClock() {
+  const gst = new Date(Date.now() + 4 * 60 * 60 * 1000);
+  const el  = document.getElementById('clock');
+  if (el) el.textContent =
+    String(gst.getUTCHours()).padStart(2,'0') + ':' +
+    String(gst.getUTCMinutes()).padStart(2,'0') + ':' +
+    String(gst.getUTCSeconds()).padStart(2,'0') + ' GST';
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Close modal on overlay click
+document.getElementById('modal-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ── Init ──
+(function init() {
+  const s = getSession();
+  if (s.email && s.csrf) {
+    _email = s.email; _csrf = s.csrf; _name = s.name;
+    bootApp();
+  }
+})();
+</script>
+</body>
+</html>

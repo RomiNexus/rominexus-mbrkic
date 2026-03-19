@@ -23,7 +23,7 @@
     - Rate-limit awareness: retry-after respected on 429 responses
   -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://rominexus.workers.dev https://script.google.com https://script.googleusercontent.com; img-src 'self' data:; frame-ancestors 'none';">
+        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://rominexus-proxy.vacorp-inquiries.workers.dev https://script.google.com https://script.googleusercontent.com; img-src 'self' data:; frame-ancestors 'none';">
   <!-- frame-ancestors 'none' = clickjacking protection (no _headers file needed for this) -->
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -667,7 +667,7 @@
 //           Input sanitization before any API submission
 // ============================================================
 
-const API_URL = 'https://rominexus.workers.dev';
+const API_URL = 'https://rominexus-proxy.vacorp-inquiries.workers.dev';
 
 // OWASP A03: Sanitize any string before inserting into DOM via textContent
 // (belt-and-suspenders — we always use textContent, but sanitize before

@@ -23,7 +23,8 @@
     - Rate-limit awareness: retry-after respected on 429 responses
   -->
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://rominexus.workers.dev https://script.google.com https://script.googleusercontent.com; img-src 'self' data:;">
+        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://rominexus.workers.dev https://script.google.com https://script.googleusercontent.com; img-src 'self' data:; frame-ancestors 'none';">
+  <!-- frame-ancestors 'none' = clickjacking protection (no _headers file needed for this) -->
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -968,8 +969,14 @@ async function submitHoursLog() {
 function renderHoursLog() {
   const log = getLocalData('hours_log', []);
   const el  = document.getElementById('hoursLogList');
-  if (!log.length) { el.innerHTML = '<div class="empty-state">NO HOURS LOGGED</div>'; return; }
   el.innerHTML = '';
+  if (!log.length) {
+    const empty = document.createElement('div');
+    empty.className   = 'empty-state';
+    empty.textContent = 'NO HOURS LOGGED';
+    el.appendChild(empty);
+    return;
+  }
   log.slice(0, 50).forEach(e => {
     const row = document.createElement('div');
     row.className = 'log-entry';
@@ -1078,7 +1085,6 @@ function advanceStage(idx) {
 // ── Add QC Modal ──
 let _modalMode = 'checklist';
 let _modalQCIdx = -1;
-const _chkState = {};
 
 function openAddQC() {
   _modalMode = 'addQC';
@@ -1275,8 +1281,14 @@ function renderMilestoneTracker() {
 function renderAttrLog() {
   const log = getLocalData('attr_log', []);
   const el  = document.getElementById('attrLog');
-  if (!log.length) { el.innerHTML = '<div class="empty-state">NO ATTRIBUTION RECORDS</div>'; return; }
   el.innerHTML = '';
+  if (!log.length) {
+    const empty = document.createElement('div');
+    empty.className   = 'empty-state';
+    empty.textContent = 'NO ATTRIBUTION RECORDS';
+    el.appendChild(empty);
+    return;
+  }
   log.slice(0, 30).forEach(e => {
     const row  = document.createElement('div');
     row.className = 'attr-row';
